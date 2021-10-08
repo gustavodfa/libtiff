@@ -176,6 +176,9 @@ case "${host_os}" in
         ;;
 esac
 
+LIBS="-luring $LIBS"
+tiff_libs_private="-luring ${tiff_libs_private}"
+
 dnl Checks for header files.
 AC_CHECK_HEADERS([assert.h fcntl.h io.h search.h unistd.h])
 
