@@ -17,6 +17,10 @@ config/test-driver
 *.o
 *.la
 *.lo
+build/
+cmake/
+html/
+config/
 .deps
 .libs
 config.log
