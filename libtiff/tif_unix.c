@@ -64,6 +64,8 @@ typedef union fd_as_handle_union
 	thandle_t h;
 } fd_as_handle_union_t;
 
+#define IO_SIZE_MAX 1024 
+
 static tmsize_t
 _tiffReadProc(thandle_t fd, void* buf, tmsize_t size)
 {
@@ -76,94 +78,65 @@ _tiffReadProc(thandle_t fd, void* buf, tmsize_t size)
 		errno=EINVAL;
 		return (tmsize_t) -1;
 	}
-	int nblocks = (bytes_total/TIFF_IO_MAX) + (bytes_total % TIFF_IO_MAX ? 1 : 0);
-	struct io_uring ring;
-	io_uring_queue_init(nblocks, &ring, NULL);
-	struct io_uring_sqe* sqe = io_uring_get_sqe(&ring);
-	loff_t fd_offset = lseek(fdh.fd, 0, SEEK_CUR);
 	fdh.h = fd;
         for (bytes_read=0; bytes_read < bytes_total; bytes_read+=count)
         {
-                const char *buf_offset = (char *) buf+bytes_read;
+                char *buf_offset = (char *) buf+bytes_read;
                 size_t io_size = bytes_total-bytes_read;
-                if (io_size > TIFF_IO_MAX)
-                        io_size = TIFF_IO_MAX;
-                // count=write(fdh.fd, buf_offset, (TIFFIOSize_t) io_size);
-				io_uring_prep_read(sqe, fdh.fd, buf_offset, (TIFFIOSize_t) io_size, (off_t) fd_offset);
-				fd_offset += io_size;
-				count=io_size;
+                if (io_size > IO_SIZE_MAX)
+                        io_size = IO_SIZE_MAX;
+                count=read(fdh.fd, buf_offset, (TIFFIOSize_t) io_size);
                 if (count <= 0)
                         break;
         }
         if (count < 0)
                 return (tmsize_t)-1;
-		io_uring_submit(&ring);
-		size_t bytes_left = bytes_total;
-		struct io_uring_cqe *cqe;
-		while (bytes_left)
-		{
-			int ret = io_uring_wait_cqe(&ring, &cqe);
-			if (!ret)
-			{
-				bytes_left -= cqe->res;
-				// printf("left: %lu | cqe->res: %d\n", bytes_left, cqe->res);
-			}
-		}
-		io_uring_cqe_seen(&ring, cqe);
-		io_uring_queue_exit(&ring);
-
         return (tmsize_t) bytes_read;
 }
 
 static tmsize_t
-_tiffWriteProc(thandle_t fd, void* buf, tmsize_t size)
-{
+_tiffWriteProc(thandle_t fd, void* buf, tmsize_t size) {
 	fd_as_handle_union_t fdh;
-	const size_t bytes_total = (size_t) size;
-        size_t bytes_written;
-        tmsize_t count = -1;
-	if ((tmsize_t) bytes_total != size)
-	{
-		errno=EINVAL;
+	fdh.fd = fd;
+	size_t total_bytes = (size_t) size;
+
+	struct io_uring ring;
+	int init_ret = io_uring_queue_init(4096, &ring, 0);
+	if (init_ret) {
+		printf("error: couldn't init queues (-%d)", init_ret);
 		return (tmsize_t) -1;
 	}
-	int nblocks = (bytes_total/TIFF_IO_MAX) + (bytes_total % TIFF_IO_MAX ? 1 : 0);
-	struct io_uring ring;
-	io_uring_queue_init(nblocks, &ring, NULL);
-	struct io_uring_sqe* sqe = io_uring_get_sqe(&ring);
-	loff_t fd_offset = lseek(fdh.fd, 0, SEEK_CUR);
-	fdh.h = fd;
-        for (bytes_written=0; bytes_written < bytes_total; bytes_written+=count)
-        {
-                const char *buf_offset = (char *) buf+bytes_written;
-                size_t io_size = bytes_total-bytes_written;
-                if (io_size > TIFF_IO_MAX)
-                        io_size = TIFF_IO_MAX;
-                // count=write(fdh.fd, buf_offset, (TIFFIOSize_t) io_size);
-				io_uring_prep_write(sqe, fdh.fd, buf_offset, (TIFFIOSize_t) io_size, (off_t) fd_offset);
-				fd_offset += io_size;
-				count=io_size;
-                if (count <= 0)
-                        break;
-        }
-        if (count < 0)
-                return (tmsize_t)-1;
-		io_uring_submit(&ring);
-		size_t bytes_left = bytes_total;
-		struct io_uring_cqe *cqe;
-		while (bytes_left)
-		{
-			int ret = io_uring_wait_cqe(&ring, &cqe);
-			if (!ret)
-			{
-				bytes_left -= cqe->res;
-				// printf("left: %lu | cqe->res: %d\n", bytes_left, cqe->res);
-			}
+	struct io_uring_sqe *sqe;
+	size_t bytes_queued = 0;
+	off_t fd_offset = lseek(fdh.fd, 0, SEEK_CUR);
+	do {
+		sqe = io_uring_get_sqe(&ring);
+		while (sqe == NULL) {
+			sqe = io_uring_get_sqe(&ring);
 		}
+
+		const char *buf_offset = (char *) buf + bytes_queued;
+		size_t io_size = total_bytes - bytes_queued;
+		if (io_size > IO_SIZE_MAX) io_size = IO_SIZE_MAX;
+		io_uring_prep_write(sqe, fdh.fd, buf_offset, io_size, fd_offset);
+		fd_offset += io_size;
+		bytes_queued += io_size;
+	} while (bytes_queued < total_bytes);
+	io_uring_submit(&ring);
+
+	struct io_uring_cqe *cqe;
+	size_t bytes_written = 0;
+	do {
+		int ret = io_uring_wait_cqe(&ring, &cqe);
+		if (ret < 0) {
+			return (tmsize_t) -1;
+		}
+		bytes_written += cqe->res;
 		io_uring_cqe_seen(&ring, cqe);
-		io_uring_queue_exit(&ring);
-        return (tmsize_t) bytes_written;
-	/* return ((tmsize_t) write(fdh.fd, buf, bytes_total)); */
+	} while (bytes_written < total_bytes);
+	
+	io_uring_queue_exit(&ring);
+	return (tmsize_t) bytes_written;
 }
 
 static uint64_t
