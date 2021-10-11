@@ -378,7 +378,7 @@ t2pWriteFile(TIFF *tif, tdata_t data, tmsize_t size)
 	thandle_t client = TIFFClientdata(tif);
 	TIFFReadWriteProc proc = TIFFGetWriteProc(tif);
 	if (proc)
-		return proc(client, data, size);
+		return proc(client, data, size, tif);
 	return -1;
 }
 
@@ -393,14 +393,14 @@ t2pSeekFile(TIFF *tif, toff_t offset, int whence)
 }
 
 static tmsize_t 
-t2p_readproc(thandle_t handle, tdata_t data, tmsize_t size) 
+t2p_readproc(thandle_t handle, tdata_t data, tmsize_t size, TIFF* tif) 
 {
-	(void) handle, (void) data, (void) size;
+	(void) handle, (void) data, (void) size, (void) tif;
 	return -1;
 }
 
 static tmsize_t 
-t2p_writeproc(thandle_t handle, tdata_t data, tmsize_t size) 
+t2p_writeproc(thandle_t handle, tdata_t data, tmsize_t size, TIFF* tif) 
 {
 	T2P *t2p = (T2P*) handle;
 	if (t2p->outputdisable <= 0 && t2p->outputfile) {
@@ -421,7 +421,7 @@ t2p_seekproc(thandle_t handle, uint64_t offset, int whence)
 }
 
 static int 
-t2p_closeproc(thandle_t handle)
+t2p_closeproc(thandle_t handle, TIFF* tif)
 { 
 	T2P *t2p = (T2P*) handle;
 	return fclose(t2p->outputfile);

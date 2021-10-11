@@ -25,6 +25,8 @@
 #ifndef _TIFFIO_
 #define	_TIFFIO_
 
+#include "liburing.h"
+
 /*
  * TIFF I/O Library Definitions.
  */
@@ -274,9 +276,9 @@ extern "C" {
 #endif
 typedef void (*TIFFErrorHandler)(const char*, const char*, va_list);
 typedef void (*TIFFErrorHandlerExt)(thandle_t, const char*, const char*, va_list);
-typedef tmsize_t (*TIFFReadWriteProc)(thandle_t, void*, tmsize_t);
+typedef tmsize_t (*TIFFReadWriteProc)(thandle_t, void*, tmsize_t, TIFF*);
 typedef toff_t (*TIFFSeekProc)(thandle_t, toff_t, int);
-typedef int (*TIFFCloseProc)(thandle_t);
+typedef int (*TIFFCloseProc)(thandle_t, TIFF*);
 typedef toff_t (*TIFFSizeProc)(thandle_t);
 typedef int (*TIFFMapFileProc)(thandle_t, void** base, toff_t* size);
 typedef void (*TIFFUnmapFileProc)(thandle_t, void* base, toff_t size);

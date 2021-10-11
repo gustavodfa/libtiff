@@ -22,6 +22,8 @@
  * OF THIS SOFTWARE.
  */
 
+#include "liburing.h"
+
 /*
  * TIFF Library.
  */
@@ -162,6 +164,13 @@ TIFFClientOpen(
 	if (m == O_RDONLY || m == O_RDWR)
 		tif->tif_flags |= STRIPCHOP_DEFAULT;
 	#endif
+			struct io_uring ring;
+		int init_ret = io_uring_queue_init(4096, &ring, 0);
+		if (init_ret) {
+			printf("error: couldn't init queues (%s)", strerror(-init_ret));
+			return NULL;
+		}
+		tif->tif_uring = &ring;
 
 	/*
 	 * Process library-specific flags in the open mode string.

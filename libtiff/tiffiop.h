@@ -28,6 +28,7 @@
  * ``Library-private'' definitions.
  */
 
+#include "liburing.h"
 #include "tif_config.h"
 
 #ifdef HAVE_FCNTL_H
@@ -196,6 +197,7 @@ struct tiff {
 	 * setting up an old tag extension scheme. */
 	TIFFFieldArray*      tif_fieldscompat;
 	size_t               tif_nfieldscompat;
+	struct io_uring*     tif_uring;
 };
 
 #define isPseudoTag(t) (t > 0xffff)            /* is tag value normal or pseudo */
@@ -205,13 +207,13 @@ struct tiff {
 #define isFillOrder(tif, o) (((tif)->tif_flags & (o)) != 0)
 #define isUpSampled(tif) (((tif)->tif_flags & TIFF_UPSAMPLED) != 0)
 #define TIFFReadFile(tif, buf, size) \
-	((*(tif)->tif_readproc)((tif)->tif_clientdata,(buf),(size)))
+	((*(tif)->tif_readproc)((tif)->tif_clientdata,(buf),(size),(tif)))
 #define TIFFWriteFile(tif, buf, size) \
-	((*(tif)->tif_writeproc)((tif)->tif_clientdata,(buf),(size)))
+	((*(tif)->tif_writeproc)((tif)->tif_clientdata,(buf),(size),(tif)))
 #define TIFFSeekFile(tif, off, whence) \
 	((*(tif)->tif_seekproc)((tif)->tif_clientdata,(off),(whence)))
 #define TIFFCloseFile(tif) \
-	((*(tif)->tif_closeproc)((tif)->tif_clientdata))
+	((*(tif)->tif_closeproc)((tif)->tif_clientdata, (tif)))
 #define TIFFGetFileSize(tif) \
 	((*(tif)->tif_sizeproc)((tif)->tif_clientdata))
 #define TIFFMapFileContents(tif, paddr, psize) \

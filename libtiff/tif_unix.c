@@ -67,7 +67,7 @@ typedef union fd_as_handle_union
 #define IO_SIZE_MAX 1024 
 
 static tmsize_t
-_tiffReadProc(thandle_t fd, void* buf, tmsize_t size)
+_tiffReadProc(thandle_t fd, void* buf, tmsize_t size, TIFF* tif)
 {
 	fd_as_handle_union_t fdh;
         const size_t bytes_total = (size_t) size;
@@ -95,24 +95,23 @@ _tiffReadProc(thandle_t fd, void* buf, tmsize_t size)
 }
 
 static tmsize_t
-_tiffWriteProc(thandle_t fd, void* buf, tmsize_t size) {
+_tiffWriteProc(thandle_t fd, void* buf, tmsize_t size, TIFF* tif) {
 	fd_as_handle_union_t fdh;
 	fdh.fd = fd;
 	size_t total_bytes = (size_t) size;
 
-	struct io_uring ring;
-	int init_ret = io_uring_queue_init(4096, &ring, 0);
-	if (init_ret) {
-		printf("error: couldn't init queues (%s)", strerror(-init_ret));
-		return (tmsize_t) -1;
-	}
+	struct io_uring *ring = (tif)->tif_uring;
+
 	struct io_uring_sqe *sqe;
 	size_t bytes_queued = 0;
 	off_t fd_offset = lseek(fdh.fd, 0, SEEK_CUR);
 	do {
-		sqe = io_uring_get_sqe(&ring);
+		unsigned int a = io_uring_sq_ready(ring);
+		unsigned int b = io_uring_sq_space_left(ring);
+		printf("we have here %u and %u\n ", a, b);
+		sqe = io_uring_get_sqe(ring);
 		while (sqe == NULL) {
-			sqe = io_uring_get_sqe(&ring);
+			sqe = io_uring_get_sqe(ring);
 		}
 
 		const char *buf_offset = (char *) buf + bytes_queued;
@@ -122,21 +121,20 @@ _tiffWriteProc(thandle_t fd, void* buf, tmsize_t size) {
 		fd_offset += io_size;
 		bytes_queued += io_size;
 	} while (bytes_queued < total_bytes);
-	io_uring_submit(&ring);
+	io_uring_submit((tif->tif_uring));
 
 	struct io_uring_cqe *cqe;
 	size_t bytes_written = 0;
 	do {
-		int ret = io_uring_wait_cqe(&ring, &cqe);
+		int ret = io_uring_wait_cqe(ring, &cqe);
 		if (ret < 0) {
 			printf("error: %s", strerror(-ret));
 			return (tmsize_t) -1;
 		}
 		bytes_written += cqe->res;
-		io_uring_cqe_seen(&ring, cqe);
+		io_uring_cqe_seen(ring, cqe);
 	} while (bytes_written < total_bytes);
 	
-	io_uring_queue_exit(&ring);
 	return (tmsize_t) bytes_written;
 }
 
@@ -155,10 +153,12 @@ _tiffSeekProc(thandle_t fd, uint64_t off, int whence)
 }
 
 static int
-_tiffCloseProc(thandle_t fd)
+_tiffCloseProc(thandle_t fd, TIFF* tif)
 {
 	fd_as_handle_union_t fdh;
 	fdh.h = fd;
+	struct io_uring *ring = tif->tif_uring;
+	io_uring_queue_exit(ring);
 	return(close(fdh.fd));
 }
 
@@ -231,8 +231,11 @@ TIFFFdOpen(int fd, const char* name, const char* mode)
 	    _tiffReadProc, _tiffWriteProc,
 	    _tiffSeekProc, _tiffCloseProc, _tiffSizeProc,
 	    _tiffMapProc, _tiffUnmapProc);
-	if (tif)
+	if (tif) {
 		tif->tif_fd = fd;
+	} else {
+		printf("EEEEEI\n");
+	}
 	return (tif);
 }
 

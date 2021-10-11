@@ -76,16 +76,16 @@ struct tiffos_data;
 
 extern "C" {
 
-	static tmsize_t _tiffosReadProc(thandle_t, void*, tmsize_t);
-	static tmsize_t _tiffisReadProc(thandle_t fd, void* buf, tmsize_t size);
-	static tmsize_t _tiffosWriteProc(thandle_t fd, void* buf, tmsize_t size);
-	static tmsize_t _tiffisWriteProc(thandle_t, void*, tmsize_t);
+	static tmsize_t _tiffosReadProc(thandle_t, void*, tmsize_t, TIFF* tif);
+	static tmsize_t _tiffisReadProc(thandle_t fd, void* buf, tmsize_t size, TIFF* tif);
+	static tmsize_t _tiffosWriteProc(thandle_t fd, void* buf, tmsize_t size, TIFF* tif);
+	static tmsize_t _tiffisWriteProc(thandle_t, void*, tmsize_t, TIFF* tif);
 	static uint64_t   _tiffosSeekProc(thandle_t fd, uint64_t off, int whence);
 	static uint64_t   _tiffisSeekProc(thandle_t fd, uint64_t off, int whence);
 	static uint64_t   _tiffosSizeProc(thandle_t fd);
 	static uint64_t   _tiffisSizeProc(thandle_t fd);
-	static int      _tiffosCloseProc(thandle_t fd);
-	static int      _tiffisCloseProc(thandle_t fd);
+	static int      _tiffosCloseProc(thandle_t fd, TIFF* tif);
+	static int      _tiffisCloseProc(thandle_t fd, TIFF* tif);
 	static int 	_tiffDummyMapProc(thandle_t , void** base, toff_t* size );
 	static void     _tiffDummyUnmapProc(thandle_t , void* base, toff_t size );
 	static TIFF*    _tiffStreamOpen(const char* name, const char* mode, void *fd);
@@ -103,13 +103,13 @@ struct tiffos_data
 };
 
 static tmsize_t
-_tiffosReadProc(thandle_t, void*, tmsize_t)
+_tiffosReadProc(thandle_t, void*, tmsize_t, TIFF* tif)
 {
         return 0;
 }
 
 static tmsize_t
-_tiffisReadProc(thandle_t fd, void* buf, tmsize_t size)
+_tiffisReadProc(thandle_t fd, void* buf, tmsize_t size, TIFF* tif)
 {
         tiffis_data	*data = reinterpret_cast<tiffis_data *>(fd);
 
@@ -124,7 +124,7 @@ _tiffisReadProc(thandle_t fd, void* buf, tmsize_t size)
 }
 
 static tmsize_t
-_tiffosWriteProc(thandle_t fd, void* buf, tmsize_t size)
+_tiffosWriteProc(thandle_t fd, void* buf, tmsize_t size, TIFF* tif)
 {
 	tiffos_data	*data = reinterpret_cast<tiffos_data *>(fd);
 	ostream		*os = data->stream;
@@ -141,7 +141,7 @@ _tiffosWriteProc(thandle_t fd, void* buf, tmsize_t size)
 }
 
 static tmsize_t
-_tiffisWriteProc(thandle_t, void*, tmsize_t)
+_tiffisWriteProc(thandle_t, void*, tmsize_t, TIFF* tif)
 {
 	return 0;
 }
@@ -314,7 +314,7 @@ _tiffisSizeProc(thandle_t fd)
 }
 
 static int
-_tiffosCloseProc(thandle_t fd)
+_tiffosCloseProc(thandle_t fd, TIFF* tif)
 {
 	// Our stream was not allocated by us, so it shouldn't be closed by us.
 	delete reinterpret_cast<tiffos_data *>(fd);
@@ -322,7 +322,7 @@ _tiffosCloseProc(thandle_t fd)
 }
 
 static int
-_tiffisCloseProc(thandle_t fd)
+_tiffisCloseProc(thandle_t fd, TIFF* tif)
 {
 	// Our stream was not allocated by us, so it shouldn't be closed by us.
 	delete reinterpret_cast<tiffis_data *>(fd);

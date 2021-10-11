@@ -124,7 +124,7 @@ TIFFClose(TIFF* tif)
 	thandle_t fd = tif->tif_clientdata;
 
 	TIFFCleanup(tif);
-	(void) (*closeproc)(fd);
+	(void) (*closeproc)(fd, tif);
 }
 
 /* vim: set ts=8 sts=8 sw=8 noet: */
