@@ -103,7 +103,7 @@ _tiffWriteProc(thandle_t fd, void* buf, tmsize_t size) {
 	struct io_uring ring;
 	int init_ret = io_uring_queue_init(4096, &ring, 0);
 	if (init_ret) {
-		printf("error: couldn't init queues (-%d)", init_ret);
+		printf("error: couldn't init queues (%s)", strerror(-init_ret));
 		return (tmsize_t) -1;
 	}
 	struct io_uring_sqe *sqe;
@@ -129,6 +129,7 @@ _tiffWriteProc(thandle_t fd, void* buf, tmsize_t size) {
 	do {
 		int ret = io_uring_wait_cqe(&ring, &cqe);
 		if (ret < 0) {
+			printf("error: %s", strerror(-ret));
 			return (tmsize_t) -1;
 		}
 		bytes_written += cqe->res;
